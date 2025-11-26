@@ -13,7 +13,7 @@ from db_manager import (init_db, db_worker, get_rostros_paginados, get_registros
                         create_user, get_user_by_id, get_user_by_username)
 
 app = Flask(__name__)
-app.secret_key = 'tu-clave-secreta-super-dificil-de-adivinar' 
+app.secret_key = 'clave-secreta' 
 
 init_db()
 

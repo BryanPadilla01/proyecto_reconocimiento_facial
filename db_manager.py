@@ -83,7 +83,7 @@ def cargar_encodings_conocidos():
     datos_rostros_conocidos = []
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, encoding FROM rostros_conocidos")
+        cursor.execute("SELECT id, encoding FROM rostros_conocidos WHERE timestamp >= date('now', 'start of day')")
         resultados = cursor.fetchall()
         for row in resultados:
             encoding_array = np.frombuffer(row[1], dtype=np.float64)
