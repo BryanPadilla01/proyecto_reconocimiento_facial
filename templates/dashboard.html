@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard de Reconocimiento Facial</title>
+    <style>
+        body { font-family: "Segoe UI", Roboto, sans-serif; background-color: #2c3e50; color: #ecf0f1; margin: 0; padding: 20px; }
+        .main-container { display: flex; flex-wrap: wrap; gap: 20px; }
+        .column { flex: 1; min-width: 450px; }
+        .card { background-color: #34495e; padding: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 1px solid #4a627a; }
+        h1, h2 { text-align: center; color: #ffffff; }
+        h1 { margin-bottom: 10px; }
+        .user-bar { text-align: right; margin-bottom: 20px; padding-right: 10px; }
+        .user-bar span { margin-right: 15px; }
+        .user-bar a { color: #e74c3c; text-decoration: none; font-weight: bold; }
+        .camera-feed { width: 100%; height: auto; border: 5px solid #3498db; border-radius: 10px; background-color: #000; }
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; text-align: center; }
+        .summary-item { background-color: #4a627a; color: white; padding: 20px; border-radius: 8px; }
+        .summary-item h3 { margin: 0; color: #bdc3c7; font-size: 1em; text-transform: uppercase; font-weight: 300; }
+        .summary-item p { font-size: 2em; margin: 10px 0 0 0; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 10px; border: 1px solid #4a627a; text-align: left; }
+        th { background-color: #3498db; color: #ffffff; }
+        tr:nth-child(even) { background-color: #2c3e50; }
+        .pagination { text-align: center; margin-top: 20px; }
+        .pagination a, .pagination span { margin: 0 5px; padding: 8px 12px; border-radius: 5px; text-decoration: none; color: #3498db; border: 1px solid #3498db; }
+        .pagination a:hover { background-color: #3498db; color: white; }
+        .pagination .current { background-color: #3498db; color: white; border: 1px solid #3498db; }
+        .alert { padding: 15px; margin-bottom: 10px; border-radius: 5px; color: white; min-width: 300px; }
+        .alert-danger { background-color: #e74c3c; }
+        .alert-success { background-color: #2ecc71; }
+        .alert-warning { background-color: #f39c12; }
+    </style>
+</head>
+<body>
+    <div style="position: absolute; top: 20px; right: 20px; z-index: 2000;">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    </div>
+
+    <h1>Dashboard de Reconocimiento Facial en Vivo</h1>
+    <div class="user-bar">
+        <span>Hola, <strong>{{ current_user.username }}</strong></span>
+        <a href="{{ url_for('logout') }}">Cerrar Sesión</a>
+    </div>
+
+    <div class="main-container">
+        <div class="column">
+            <div class="card">
+                <h2>Visualizador en Vivo</h2>
+                <img src="{{ url_for('video_feed') }}" class="camera-feed">
+            </div>
+        </div>
+        <div class="column">
+            <div class="card">
+                <h2>Monitoreo de Registros</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <h3>Total de Registros</h3>
+                        <p id="total-registros">{{ total_items }}</p> 
+                    </div>
+                    <div class="summary-item">
+                        <h3>Nuevos este Mes</h3>
+                        <p id="nuevos-mes">{{ registros_mes }}</p>
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Fecha Registro</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-registros">
+                        {% for rostro in rostros %}
+                        <tr>
+                            <td>{{ rostro.id }}</td>
+                            <td>{{ rostro.timestamp }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="2" style="text-align:center;">No hay registros.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                
+                {% if total_pages > 1 %}
+                <div class="pagination">
+                    {% if page > 1 %}
+                    <a href="{{ url_for('dashboard', page=page-1) }}">&laquo; Anterior</a>
+                    {% endif %}
+                    <span class="current">Página {{ page }} de {{ total_pages }}</span>
+                    {% if page < total_pages %}
+                    <a href="{{ url_for('dashboard', page=page+1) }}">Siguiente &raquo;</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateDashboard() {
+            const params = new URLSearchParams(window.location.search);
+            const page = params.get('page') || 1;
+
+            fetch(`/api/dashboard_data?page=${page}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('total-registros').textContent = data.total_items;
+                    document.getElementById('nuevos-mes').textContent = data.registros_mes;
+
+                    const tablaBody = document.getElementById('tabla-registros');
+                    tablaBody.innerHTML = '';
+
+                    if (data.rostros.length === 0) {
+                        tablaBody.innerHTML = '<tr><td colspan="2" style="text-align:center;">No hay registros.</td></tr>';
+                    } else {
+                        data.rostros.forEach(rostro => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${rostro.id}</td>
+                                <td>${rostro.timestamp}</td>
+                            `;
+                            tablaBody.appendChild(tr);
+                        });
+                    }
+                })
+                .catch(error => console.error('Error al actualizar el dashboard:', error));
+        }
+        setInterval(updateDashboard, 5000);
+    </script>
+</body>
+</html>
