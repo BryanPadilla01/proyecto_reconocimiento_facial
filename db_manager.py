@@ -151,3 +151,68 @@ def get_rostros_paginados(page=1, per_page=10):
         lista_rostros = [{"id": r[0], "timestamp": r[1]} for r in resultados]
         return lista_rostros, total_items
     finally: conn.close()
+
+def get_all_registros_raw():
+    """Obtiene todos los registros históricos para exportación."""
+    conn = get_db_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor()
+        #Obtiene ID y Timestamp formateado
+        cursor.execute("SELECT id, strftime('%Y-%m-%d %H:%M:%S', timestamp) as fecha FROM rostros_conocidos ORDER BY timestamp DESC")
+        rows = cursor.fetchall()
+        #Retorna una lista de diccionarios para que Pandas la pueda procesar
+        return [{"ID_Visitante": row[0], "Fecha_Hora_Ingreso": row[1]} for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error al exportar datos: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_stats_por_dia_semana():
+    """Devuelve el conteo total agrupado por día de la semana (0=Domingo, 6=Sábado)."""
+    conn = get_db_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor()
+        #SQLite strftime('%w') devuelve 0-6
+        cursor.execute("""
+            SELECT strftime('%w', timestamp), COUNT(*) 
+            FROM rostros_conocidos 
+            GROUP BY 1 
+            ORDER BY 1 ASC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        print(f"Error stats semana: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_stats_tendencia(fecha_inicio=None, fecha_fin=None):
+    """Devuelve cantidad de visitas agrupadas por fecha (YYYY-MM-DD)."""
+    conn = get_db_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor()
+        
+        query = "SELECT date(timestamp), COUNT(*) FROM rostros_conocidos"
+        params = []
+        
+        #Filtro de fechas
+        if fecha_inicio and fecha_fin:
+            query += " WHERE date(timestamp) BETWEEN ? AND ?"
+            params = [fecha_inicio, fecha_fin]
+        else:
+            #Por defecto últimos 30 días
+            query += " WHERE timestamp >= date('now', '-30 days')"
+            
+        query += " GROUP BY 1 ORDER BY 1 ASC"
+        
+        cursor.execute(query, params)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        print(f"Error stats tendencia: {e}")
+        return []
+    finally:
+        conn.close()

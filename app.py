@@ -1,4 +1,4 @@
-from flask import Flask, render_template, Response, request, redirect, url_for, flash
+from flask import Flask, render_template, Response, request, redirect, url_for, flash, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import cv2
@@ -7,10 +7,14 @@ import math
 import os
 import webbrowser
 from threading import Timer
+import pandas as pd
+import io
+from datetime import datetime
 
 from face_processor import procesar_frame
 from db_manager import (init_db, db_worker, get_rostros_paginados, get_registros_mes_actual, 
-                        create_user, get_user_by_id, get_user_by_username)
+                        create_user, get_user_by_id, get_user_by_username, get_all_registros_raw,
+                        get_stats_por_dia_semana, get_stats_tendencia)
 
 app = Flask(__name__)
 app.secret_key = 'clave-secreta' 
@@ -51,24 +55,6 @@ def login():
         else:
             flash('Usuario o contraseña incorrectos. Por favor, intente de nuevo.', 'danger')
     return render_template('login.html')
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        if get_user_by_username(username):
-            flash('El nombre de usuario ya existe. Por favor, elija otro.', 'warning')
-            return redirect(url_for('register'))
-        password_hash = generate_password_hash(password, method='pbkdf2:sha256')
-        if create_user(username, password_hash):
-            flash('¡Registro exitoso! Por favor, inicie sesión.', 'success')
-            return redirect(url_for('login'))
-        else:
-            flash('Ocurrió un error durante el registro.', 'danger')
-    return render_template('register.html')
 
 @app.route('/logout')
 @login_required
@@ -122,6 +108,76 @@ def dashboard_data():
         "total_items": total_items,
         "page": page,
         "total_pages": total_pages
+    }
+
+@app.route('/export/excel')
+@login_required
+def export_excel():
+    data = get_all_registros_raw()
+    if not data:
+        flash('No hay datos para exportar.', 'warning')
+        return redirect(url_for('dashboard'))
+    
+    df = pd.DataFrame(data)
+    
+    #Genera un archivo en memoria (Buffer)
+    output = io.BytesIO()
+    #Usa ExcelWriter para guardar en el buffer
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Reporte_Visitas')
+    
+    output.seek(0)
+    
+    filename = f"Reporte_Museo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return send_file(output, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.route('/export/csv')
+@login_required
+def export_csv():
+    data = get_all_registros_raw()
+    if not data:
+        flash('No hay datos para exportar.', 'warning')
+        return redirect(url_for('dashboard'))
+        
+    df = pd.DataFrame(data)
+    
+    #Genera un CSV en memoria
+    output = io.StringIO()
+    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig') # sep=';' es mejor para Excel en español
+    
+    #Convierte a bytes para send_file
+    mem = io.BytesIO()
+    mem.write(output.getvalue().encode('utf-8-sig'))
+    mem.seek(0)
+    
+    filename = f"Reporte_Museo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return send_file(mem, as_attachment=True, download_name=filename, mimetype='text/csv')
+
+@app.route('/api/charts_data')
+@login_required
+def charts_data():
+    #Datos para Gráfico Semanal
+    raw_semana = get_stats_por_dia_semana()
+    #Mapear 0-6 a Nombres de días. Inicializamos todo en 0.
+    dias_map = {0: 'Domingo', 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado'}
+    conteo_semana = {k: 0 for k in dias_map.keys()}
+    
+    for dia_num, count in raw_semana:
+        conteo_semana[int(dia_num)] = count
+        
+    #Datos para Tendencia
+    start_date = request.args.get('start')
+    end_date = request.args.get('end')
+    
+    raw_tendencia = get_stats_tendencia(start_date, end_date)
+    fechas = [row[0] for row in raw_tendencia]
+    valores = [row[1] for row in raw_tendencia]
+    
+    return {
+        "semana_labels": [dias_map[i] for i in range(7)], # Ordenado Dom a Sab
+        "semana_data": [conteo_semana[i] for i in range(7)],
+        "tendencia_labels": fechas,
+        "tendencia_data": valores
     }
 
 @app.route('/video_feed')

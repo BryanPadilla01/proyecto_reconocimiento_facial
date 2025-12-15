@@ -2,109 +2,210 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard de Reconocimiento Facial</title>
-    <style>
-        body { font-family: "Segoe UI", Roboto, sans-serif; background-color: #2c3e50; color: #ecf0f1; margin: 0; padding: 20px; }
-        .main-container { display: flex; flex-wrap: wrap; gap: 20px; }
-        .column { flex: 1; min-width: 450px; }
-        .card { background-color: #34495e; padding: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 1px solid #4a627a; }
-        h1, h2 { text-align: center; color: #ffffff; }
-        h1 { margin-bottom: 10px; }
-        .user-bar { text-align: right; margin-bottom: 20px; padding-right: 10px; }
-        .user-bar span { margin-right: 15px; }
-        .user-bar a { color: #e74c3c; text-decoration: none; font-weight: bold; }
-        .camera-feed { width: 100%; height: auto; border: 5px solid #3498db; border-radius: 10px; background-color: #000; }
-        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; text-align: center; }
-        .summary-item { background-color: #4a627a; color: white; padding: 20px; border-radius: 8px; }
-        .summary-item h3 { margin: 0; color: #bdc3c7; font-size: 1em; text-transform: uppercase; font-weight: 300; }
-        .summary-item p { font-size: 2em; margin: 10px 0 0 0; font-weight: 600; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 10px; border: 1px solid #4a627a; text-align: left; }
-        th { background-color: #3498db; color: #ffffff; }
-        tr:nth-child(even) { background-color: #2c3e50; }
-        .pagination { text-align: center; margin-top: 20px; }
-        .pagination a, .pagination span { margin: 0 5px; padding: 8px 12px; border-radius: 5px; text-decoration: none; color: #3498db; border: 1px solid #3498db; }
-        .pagination a:hover { background-color: #3498db; color: white; }
-        .pagination .current { background-color: #3498db; color: white; border: 1px solid #3498db; }
-        .alert { padding: 15px; margin-bottom: 10px; border-radius: 5px; color: white; min-width: 300px; }
-        .alert-danger { background-color: #e74c3c; }
-        .alert-success { background-color: #2ecc71; }
-        .alert-warning { background-color: #f39c12; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <div style="position: absolute; top: 20px; right: 20px; z-index: 2000;">
+    <!-- Alertas Flash -->
+    <div style="position: absolute; top: 20px; right: 20px; z-index: 2000; width: 300px;">
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
-                <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+                <div class="alert alert-{{ category }}">{{ message }}</div>
             {% endfor %}
         {% endif %}
     {% endwith %}
     </div>
 
-    <h1>Dashboard de Reconocimiento Facial en Vivo</h1>
-    <div class="user-bar">
-        <span>Hola, <strong>{{ current_user.username }}</strong></span>
-        <a href="{{ url_for('logout') }}">Cerrar Sesión</a>
-    </div>
+    <header>
+        <h1>Dashboard Museo</h1>
+        <div class="user-bar">
+            <span>Operador: <strong>{{ current_user.username }}</strong></span>
+            <a href="{{ url_for('logout') }}" class="btn-logout">Cerrar Sesión</a>
+        </div>
+    </header>
 
     <div class="main-container">
+        <!-- Columna Izquierda -->
         <div class="column">
             <div class="card">
-                <h2>Visualizador en Vivo</h2>
-                <img src="{{ url_for('video_feed') }}" class="camera-feed">
+                <h2>Cámara Principal</h2>
+                <div class="camera-wrapper">
+                    <img src="{{ url_for('video_feed') }}" class="camera-feed" alt="Video Feed">
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Afluencia Semanal</h2>
+                <div style="height: 250px;">
+                    <canvas id="chartSemana"></canvas>
+                </div>
             </div>
         </div>
+
+        <!-- Columna Derecha -->
         <div class="column">
             <div class="card">
-                <h2>Monitoreo de Registros</h2>
+                <h2>Estadísticas y Registros</h2>
+                
+                <!-- Resumen de números -->
                 <div class="summary-grid">
                     <div class="summary-item">
-                        <h3>Total de Registros</h3>
+                        <h3>Total Histórico</h3>
                         <p id="total-registros">{{ total_items }}</p> 
                     </div>
                     <div class="summary-item">
-                        <h3>Nuevos este Mes</h3>
+                        <h3>Visitas este Mes</h3>
                         <p id="nuevos-mes">{{ registros_mes }}</p>
                     </div>
                 </div>
+                
+                <!-- Filtros para gráfico de tendencia -->
+                <div class="filter-section">
+                    <label>Desde:</label>
+                    <input type="date" id="startDate">
+                    <label>Hasta:</label>
+                    <input type="date" id="endDate">
+                    <button class="btn-filter" onclick="loadCharts()">Actualizar Gráfico</button>
+                </div>
+                
+                <!-- Gráfico de Tendencia -->
+                <div style="height: 200px; margin-bottom: 20px;">
+                    <canvas id="chartTendencia"></canvas>
+                </div>
 
+                <!-- Botones de Exportación -->
+                <div class="export-container">
+                    <a href="{{ url_for('export_csv') }}" class="btn-export btn-csv">📄 Descargar CSV</a>
+                    <a href="{{ url_for('export_excel') }}" class="btn-export btn-excel">📊 Descargar Excel</a>
+                </div>
+
+                <!-- Tabla de Datos -->
                 <table>
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>Fecha Registro</th>
+                            <th>ID Visitante</th>
+                            <th>Fecha y Hora</th>
                         </tr>
                     </thead>
                     <tbody id="tabla-registros">
                         {% for rostro in rostros %}
                         <tr>
-                            <td>{{ rostro.id }}</td>
+                            <td>#{{ rostro.id }}</td>
                             <td>{{ rostro.timestamp }}</td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="2" style="text-align:center;">No hay registros.</td></tr>
+                        <tr><td colspan="2" style="text-align:center;">No hay registros recientes.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
                 
+                <!-- Paginación -->
                 {% if total_pages > 1 %}
                 <div class="pagination">
                     {% if page > 1 %}
                     <a href="{{ url_for('dashboard', page=page-1) }}">&laquo; Anterior</a>
                     {% endif %}
-                    <span class="current">Página {{ page }} de {{ total_pages }}</span>
+                    <span class="current">Página {{ page }}</span>
                     {% if page < total_pages %}
                     <a href="{{ url_for('dashboard', page=page+1) }}">Siguiente &raquo;</a>
                     {% endif %}
                 </div>
                 {% endif %}
+
             </div>
         </div>
     </div>
 
     <script>
+        // Configuración visual de los gráficos
+        Chart.defaults.color = '#9fa6b2';
+        Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.05)';
+        Chart.defaults.font.family = "'Inter', sans-serif";
+
+        let chartSemanaInstance = null;
+        let chartTendenciaInstance = null;
+
+        // Función para cargar/filtrar gráficos
+        function loadCharts() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            
+            let url = '/api/charts_data';
+            if (start && end) {
+                url += `?start=${start}&end=${end}`;
+            }
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    renderChartSemana(data.semana_labels, data.semana_data);
+                    renderChartTendencia(data.tendencia_labels, data.tendencia_data);
+                })
+                .catch(err => console.error("Error cargando gráficos:", err));
+        }
+
+        // Renderizado de Gráfico Semanal (Barras)
+        function renderChartSemana(labels, data) {
+            const ctx = document.getElementById('chartSemana').getContext('2d');
+            if (chartSemanaInstance) chartSemanaInstance.destroy();
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, '#7e3af2');
+            gradient.addColorStop(1, '#4c1d95');
+
+            chartSemanaInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Visitas',
+                        data: data,
+                        backgroundColor: gradient,
+                        borderRadius: 5,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, grid: { borderDash: [2, 4] } } }
+                }
+            });
+        }
+
+        // Renderizado de Gráfico Tendencia (Línea)
+        function renderChartTendencia(labels, data) {
+            const ctx = document.getElementById('chartTendencia').getContext('2d');
+            if (chartTendenciaInstance) chartTendenciaInstance.destroy();
+
+            chartTendenciaInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Tendencia',
+                        data: data,
+                        borderColor: '#0e9f6e',
+                        backgroundColor: 'rgba(14, 159, 110, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, grid: { borderDash: [2, 4] } } }
+                }
+            });
+        }
+
+        // Función unificada para actualizar Tabla y Contadores
         function updateDashboard() {
             const params = new URLSearchParams(window.location.search);
             const page = params.get('page') || 1;
@@ -112,19 +213,21 @@
             fetch(`/api/dashboard_data?page=${page}`)
                 .then(response => response.json())
                 .then(data => {
+                    // Actualizar números grandes
                     document.getElementById('total-registros').textContent = data.total_items;
                     document.getElementById('nuevos-mes').textContent = data.registros_mes;
 
+                    // Actualizar Tabla
                     const tablaBody = document.getElementById('tabla-registros');
                     tablaBody.innerHTML = '';
 
                     if (data.rostros.length === 0) {
-                        tablaBody.innerHTML = '<tr><td colspan="2" style="text-align:center;">No hay registros.</td></tr>';
+                        tablaBody.innerHTML = '<tr><td colspan="2" style="text-align:center;">No hay registros recientes.</td></tr>';
                     } else {
                         data.rostros.forEach(rostro => {
                             const tr = document.createElement('tr');
                             tr.innerHTML = `
-                                <td>${rostro.id}</td>
+                                <td>#${rostro.id}</td>
                                 <td>${rostro.timestamp}</td>
                             `;
                             tablaBody.appendChild(tr);
@@ -133,7 +236,12 @@
                 })
                 .catch(error => console.error('Error al actualizar el dashboard:', error));
         }
-        setInterval(updateDashboard, 5000);
+
+        // Inicialización
+        document.addEventListener("DOMContentLoaded", () => {
+            loadCharts();
+            setInterval(updateDashboard, 5000);
+        });
     </script>
 </body>
 </html>
